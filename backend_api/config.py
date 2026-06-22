@@ -29,13 +29,10 @@ class Settings(BaseSettings):
     apifree_base_url: str = "https://api.apifree.ai"
     apifree_timeout_seconds: int = 300
 
-    # ML Model Paths
-    face_expression_model_path: str = str(
-        PROJECT_ROOT / "machine_learning" / "Face_Expression" / "runs" / "detect" / "model-train" / "weights" / "best.pt"
-    )
-    yolo_fallback_model_path: str = str(
-        PROJECT_ROOT / "machine_learning" / "Face_Expression" / "yolo11n.pt"
-    )
+    # Face Expression Detection - Hugging Face Space API
+    face_expression_api_url: str = "https://cuplis123-facial-emotion-cpls.hf.space"
+    face_expression_confidence_threshold: float = 0.3
+    face_expression_api_timeout_seconds: int = 30
 
     # Processing
     max_upload_size_mb: int = 10

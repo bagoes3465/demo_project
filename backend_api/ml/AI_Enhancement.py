@@ -13,7 +13,7 @@ MATTE_ERODE = 2
 MATTE_DILATE = 1
 
 LOCAL_PERSON_HEIGHT_RATIO = 0.78
-LOCAL_MASCOT_HEIGHT_RATIO = 0.58
+LOCAL_MASCOT_HEIGHT_RATIO = 0.85
 DEFAULT_CANVAS_HEIGHT = 1080
 MIN_PERSON_ALPHA_COVERAGE = 0.015
 
@@ -84,8 +84,8 @@ def _is_apifree_enabled() -> bool:
     return bool(key)
 
 
-def _upload_temp_image_to_supabase(image: Image.Image, max_retries: int = 3) -> str:
-    """Upload image to Supabase storage temporarily and return a public URL."""
+def _upload_temp_image_to_supabase(image: Image.Image, max_retries: int = 3) -> tuple[str, str]:
+    """Upload image to Supabase storage temporarily. Returns (public_url, storage_path)."""
     import uuid
     import time
     from database import get_supabase
@@ -103,7 +103,7 @@ def _upload_temp_image_to_supabase(image: Image.Image, max_retries: int = 3) -> 
             )
             public_url = db.storage.from_("photos").get_public_url(storage_path)
             print(f"[AI] Uploaded temp image to Supabase: {storage_path}")
-            return public_url
+            return public_url, storage_path
         except (ConnectionError, ConnectionResetError, OSError) as e:
             if attempt < max_retries - 1:
                 wait = 2 * (attempt + 1)
@@ -149,11 +149,15 @@ def _run_apifree_cartoon_merge(
 
     # Upload 3 images: composite + person face ref + mascot identity ref
     print("[AI] Uploading 3 images to Supabase...")
-    composite_url = _upload_temp_image_to_supabase(composite_img)
-    person_url = _upload_temp_image_to_supabase(person_img)
+    temp_paths = []
+    composite_url, composite_path = _upload_temp_image_to_supabase(composite_img)
+    temp_paths.append(composite_path)
+    person_url, person_path = _upload_temp_image_to_supabase(person_img)
+    temp_paths.append(person_path)
     image_urls = [composite_url, person_url]
     if mascot_img is not None:
-        mascot_url = _upload_temp_image_to_supabase(mascot_img.convert("RGB"))
+        mascot_url, mascot_path = _upload_temp_image_to_supabase(mascot_img.convert("RGB"))
+        temp_paths.append(mascot_path)
         image_urls.append(mascot_url)
 
     prompt = _build_apifree_prompt(prompt_suffix, has_mascot_ref=(mascot_img is not None))
@@ -178,76 +182,82 @@ def _run_apifree_cartoon_merge(
 
     print(f"[AI] APIFree.ai submitting {len(image_urls)} images model={model_name} aspect={aspect_ratio}")
 
-    # 1. Submit request (with retry for transient connection errors)
-    resp = None
-    for attempt in range(3):
-        try:
-            resp = req.post(f"{base_url}/v1/image/submit", headers=headers, json=payload, timeout=timeout)
-            break
-        except (ConnectionError, req.exceptions.ConnectionError, OSError) as e:
-            if attempt < 2:
-                wait = 3 * (attempt + 1)
-                print(f"[AI] APIFree.ai submit retry {attempt + 1}/3 after {wait}s: {e}")
-                import time
-                time.sleep(wait)
-            else:
-                raise RuntimeError(f"APIFree.ai connection failed after 3 retries: {e}")
+    try:
+        # 1. Submit request (with retry for transient connection errors)
+        resp = None
+        for attempt in range(3):
+            try:
+                resp = req.post(f"{base_url}/v1/image/submit", headers=headers, json=payload, timeout=timeout)
+                break
+            except (ConnectionError, req.exceptions.ConnectionError, OSError) as e:
+                if attempt < 2:
+                    wait = 3 * (attempt + 1)
+                    print(f"[AI] APIFree.ai submit retry {attempt + 1}/3 after {wait}s: {e}")
+                    import time
+                    time.sleep(wait)
+                else:
+                    raise RuntimeError(f"APIFree.ai connection failed after 3 retries: {e}")
 
-    if resp.status_code != 200:
-        raise RuntimeError(f"APIFree.ai submit error {resp.status_code}: {resp.text[:500]}")
+        if resp.status_code != 200:
+            raise RuntimeError(f"APIFree.ai submit error {resp.status_code}: {resp.text[:500]}")
 
-    data = resp.json()
-    if data.get("code") != 200:
-        error = data.get("error", data.get("code_msg", "Unknown error"))
-        raise RuntimeError(f"APIFree.ai submit error: {error}")
+        data = resp.json()
+        if data.get("code") != 200:
+            error = data.get("error", data.get("code_msg", "Unknown error"))
+            raise RuntimeError(f"APIFree.ai submit error: {error}")
 
-    request_id = data.get("resp_data", {}).get("request_id")
-    if not request_id:
-        raise RuntimeError(f"APIFree.ai did not return request_id: {data}")
+        request_id = data.get("resp_data", {}).get("request_id")
+        if not request_id:
+            raise RuntimeError(f"APIFree.ai did not return request_id: {data}")
 
-    print(f"[AI] APIFree.ai submitted. request_id={request_id}")
+        print(f"[AI] APIFree.ai submitted. request_id={request_id}")
 
-    # 2. Poll for result
-    max_polls = 60  # Max ~2 minutes (2s interval)
-    for poll_num in range(max_polls):
-        time.sleep(2)
+        # 2. Poll for result
+        max_polls = 60  # Max ~2 minutes (2s interval)
+        for poll_num in range(max_polls):
+            time.sleep(2)
 
-        check_url = f"{base_url}/v1/image/{request_id}/result"
-        check_resp = req.get(check_url, headers=headers, timeout=30)
-        check_data = check_resp.json()
+            check_url = f"{base_url}/v1/image/{request_id}/result"
+            check_resp = req.get(check_url, headers=headers, timeout=30)
+            check_data = check_resp.json()
 
-        if check_data.get("code") != 200:
-            code_msg = check_data.get("code_msg", "Unknown")
-            print(f"[AI] APIFree.ai poll error: {code_msg}")
-            continue
+            if check_data.get("code") != 200:
+                code_msg = check_data.get("code_msg", "Unknown")
+                print(f"[AI] APIFree.ai poll error: {code_msg}")
+                continue
 
-        status = check_data.get("resp_data", {}).get("status", "")
+            status = check_data.get("resp_data", {}).get("status", "")
 
-        if status == "success":
-            image_list = check_data.get("resp_data", {}).get("image_list", [])
-            if not image_list:
-                raise RuntimeError("APIFree.ai success tapi image_list kosong.")
+            if status == "success":
+                image_list = check_data.get("resp_data", {}).get("image_list", [])
+                if not image_list:
+                    raise RuntimeError("APIFree.ai success tapi image_list kosong.")
 
-            # Download the generated image
-            img_url = image_list[0]
-            print(f"[AI] APIFree.ai success! Downloading result...")
-            img_resp = req.get(img_url, timeout=60)
-            if img_resp.status_code != 200:
-                raise RuntimeError(f"APIFree.ai gagal download image: {img_resp.status_code}")
+                # Download the generated image
+                img_url = image_list[0]
+                print(f"[AI] APIFree.ai success! Downloading result...")
+                img_resp = req.get(img_url, timeout=60)
+                if img_resp.status_code != 200:
+                    raise RuntimeError(f"APIFree.ai gagal download image: {img_resp.status_code}")
 
-            result_img = Image.open(io.BytesIO(img_resp.content)).convert("RGB")
-            print(f"[AI] APIFree.ai done model={model_name} output_size={result_img.size}")
-            return _fit_image_to_canvas(result_img, canvas_size)
+                result_img = Image.open(io.BytesIO(img_resp.content)).convert("RGB")
+                print(f"[AI] APIFree.ai done model={model_name} output_size={result_img.size}")
+                return _fit_image_to_canvas(result_img, canvas_size)
 
-        elif status in ("error", "failed"):
-            error_msg = check_data.get("resp_data", {}).get("error", "Unknown error")
-            raise RuntimeError(f"APIFree.ai task failed: {error_msg}")
+            elif status in ("error", "failed"):
+                error_msg = check_data.get("resp_data", {}).get("error", "Unknown error")
+                raise RuntimeError(f"APIFree.ai task failed: {error_msg}")
 
-        # Still processing
-        if poll_num % 5 == 0:
-            print(f"[AI] APIFree.ai polling... status={status} ({poll_num * 2}s)")
+            # Still processing
+            if poll_num % 5 == 0:
+                print(f"[AI] APIFree.ai polling... status={status} ({poll_num * 2}s)")
 
-    raise RuntimeError("APIFree.ai timeout - task tidak selesai dalam waktu yang ditentukan.")
+        raise RuntimeError("APIFree.ai timeout - task tidak selesai dalam waktu yang ditentukan.")
+
+    finally:
+        # Clean up all temporary images from Supabase
+        for path in temp_paths:
+            _cleanup_temp_image(path)
 
 
 def _build_apifree_prompt(prompt_suffix: str = "", has_mascot_ref: bool = False) -> str:
@@ -271,13 +281,16 @@ def _build_apifree_prompt(prompt_suffix: str = "", has_mascot_ref: bool = False)
         "PRESERVE FROM IMAGE1: "
         "- Same background location, buildings, sky. "
         "- ALL people visible — if 2 people in Image1, keep 2 people. "
-        "- Person face identical to Image2 (face shape, eyes, nose, lips, skin, hair, glasses). "
+        "- Person face exactly same as to Image2 (face shape, eyes, nose, lips, skin, hair). "
         "- Person body shape, clothing, shirt pattern, pants, shoes — exactly as Image1. "
         "- People must look like real photographic humans, not 3D cartoon. "
 
         "MASCOT: "
         + ("Match Image3 identity exactly including text/labels on mascot. " if has_mascot_ref else "") +
         "Keep mascot anatomy identical to Image3. Do NOT add or remove limbs. "
+        "Mascot is already a 3D CGI character — only adjust pose subtly to fit the scene naturally (minimal pose change). "
+        "Do NOT add any new accessories, attributes, or extra body parts to the mascot. "
+        "Mascot size must be nearly the same height as the person. "
         "Render mascot as high-quality 3D CGI character with scene-matching lighting. "
 
         "COMPOSITION: Mascot left, people right, all full body head to feet, no cropping. "
@@ -303,6 +316,8 @@ def _build_negative_prompt() -> str:
         "3D rendered person, pixar person, animated person, CGI person, "
         "distorted mascot, deformed mascot, broken mascot anatomy, "
         "extra limbs on mascot, extra legs on mascot, extra arms on mascot, "
+        "new accessories on mascot, added attributes on mascot, extra body parts on mascot, "
+        "changed mascot identity, different mascot design, mascot with new clothing, "
         "changed clothing texture, painted clothing, canvas texture on clothes, "
 
         "removed person, missing person, puppet, doll, "
@@ -436,7 +451,7 @@ def _compose_reference_scene(
         (mascot_x, mascot_y, mascot_rgba.width, mascot_rgba.height),
         (person_x, person_y, person_rgba.width, person_rgba.height),
     ]
-    bg = _apply_depth_bokeh(bg, subject_regions, strength=2.5)
+    bg = _apply_depth_bokeh(bg, subject_regions, strength=1.5)
 
     # Apply golden hour warm color grading to the background
     bg_rgb = _apply_golden_hour_grading(bg.convert("RGB"), intensity=0.35)

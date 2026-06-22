@@ -1,4 +1,4 @@
-.machine_learning
+node_modules/
 .env
 .yolo11n.pt
 .yolo26n.pt
@@ -6,7 +6,7 @@
 node_modules
 Frontend
 .venv
-machine_learning
-my-app
-runs
-database
+machine_learning/
+my-app/
+runs/
+database/

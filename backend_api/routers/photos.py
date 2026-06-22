@@ -6,6 +6,7 @@ import string
 import uuid
 import time
 import threading
+from datetime import datetime, timezone
 from io import BytesIO
 from fastapi import APIRouter, UploadFile, File, Form, HTTPException, BackgroundTasks
 from fastapi.responses import Response
@@ -31,11 +32,22 @@ async def upload_photo(
     db = get_supabase()
 
     # Verify session exists and is active
-    session_result = db.table("photo_sessions").select("id, status").eq("id", session_id).execute()
+    session_result = db.table("photo_sessions").select("id, status, expires_at").eq("id", session_id).execute()
     if not session_result.data:
         raise HTTPException(404, "Session not found")
-    if session_result.data[0]["status"] != "active":
+    session = session_result.data[0]
+    if session["status"] != "active":
         raise HTTPException(400, "Session is not active")
+    if session.get("expires_at"):
+        expires_at = datetime.fromisoformat(session["expires_at"].replace("Z", "+00:00"))
+        if datetime.now(timezone.utc) > expires_at:
+            db.table("photo_sessions").update({"status": "expired"}).eq("id", session_id).execute()
+            raise HTTPException(400, "Session has expired")
+
+    # Validate file type
+    allowed_types = {"image/png", "image/jpeg", "image/jpg", "image/webp"}
+    if photo.content_type and photo.content_type not in allowed_types:
+        raise HTTPException(400, f"Invalid file type. Allowed: {', '.join(allowed_types)}")
 
     # Validate file size
     contents = await photo.read()
@@ -74,8 +86,13 @@ async def upload_photo(
 
     photo_data = result.data[0]
 
-    # Run face expression detection in background
-    _detect_face_expression_bg(photo_data["id"], contents)
+    # Run face expression detection in background thread
+    thread = threading.Thread(
+        target=_detect_face_expression_bg,
+        args=(photo_data["id"], contents),
+        daemon=True,
+    )
+    thread.start()
 
     return {
         "success": True,
@@ -127,7 +144,7 @@ def _detect_face_expression_bg(photo_id: str, image_bytes: bytes):
 
 @router.post("/process")
 async def process_photo(body: ProcessPhotoRequest):
-    """Process photo with background, mascot, and filter."""
+    """Start photo processing (returns immediately, runs ML in background)."""
     db = get_supabase()
 
     # Get photo
@@ -162,7 +179,7 @@ async def process_photo(body: ProcessPhotoRequest):
         "mascot_id": body.mascot_id,
         "filter_id": body.filter_id,
         "status": "pending",
-        "started_at": "now()",
+        "started_at": datetime.now(timezone.utc).isoformat(),
     }
     proc_result = db.table("photo_processing").insert(processing_row).execute()
     if not proc_result.data:
@@ -171,7 +188,36 @@ async def process_photo(body: ProcessPhotoRequest):
     processing = proc_result.data[0]
     processing_id = processing["id"]
 
-    # ─── Run ML Pipeline ───
+    # Run ML pipeline in background thread
+    thread = threading.Thread(
+        target=_run_ml_pipeline,
+        args=(processing_id, photo, background, mascot, ai_filter, body.photo_id),
+        daemon=True,
+    )
+    thread.start()
+
+    return {
+        "success": True,
+        "message": "Processing started",
+        "data": {
+            "processing_id": processing_id,
+            "photo_id": body.photo_id,
+            "status": "pending",
+        },
+    }
+
+
+def _run_ml_pipeline(
+    processing_id: str,
+    photo: dict,
+    background: dict,
+    mascot: dict,
+    ai_filter: dict | None,
+    photo_id: str,
+):
+    """Run the full ML pipeline in a background thread."""
+    db = get_supabase()
+
     try:
         start_time = time.time()
 
@@ -223,6 +269,9 @@ async def process_photo(body: ProcessPhotoRequest):
 
         processing_time_ms = int((time.time() - start_time) * 1000)
 
+        # Update status: generating QR
+        db.table("photo_processing").update({"status": "generating_qr"}).eq("id", processing_id).execute()
+
         # Generate download code & QR
         download_code = _generate_download_code()
         download_url = processed_url
@@ -238,17 +287,17 @@ async def process_photo(body: ProcessPhotoRequest):
         )
         qr_url = db.storage.from_("qrcodes").get_public_url(qr_path)
 
-        # Update processing record
+        # Update processing record → completed
         db.table("photo_processing").update({
             "status": "completed",
             "processed_path": result_path,
             "processed_url": processed_url,
             "processing_time_ms": processing_time_ms,
-            "completed_at": "now()",
+            "completed_at": datetime.now(timezone.utc).isoformat(),
         }).eq("id", processing_id).execute()
 
         # Update photo status
-        db.table("photos").update({"status": "processed"}).eq("id", body.photo_id).execute()
+        db.table("photos").update({"status": "processed"}).eq("id", photo_id).execute()
 
         # Create download link
         db.table("download_links").insert({
@@ -261,22 +310,9 @@ async def process_photo(body: ProcessPhotoRequest):
 
         # Schedule auto-cleanup after 5 minutes
         session_id = photo["session_id"]
-        _schedule_cleanup(session_id, processing_id, body.photo_id, result_path, qr_path)
+        _schedule_cleanup(session_id, processing_id, photo_id, result_path, qr_path)
 
-        return {
-            "success": True,
-            "message": "Photo processed successfully",
-            "data": {
-                "processing_id": processing_id,
-                "photo_id": body.photo_id,
-                "processed_url": processed_url,
-                "download_code": download_code,
-                "download_url": download_url,
-                "qr_code_url": qr_url,
-                "processing_time_ms": processing_time_ms,
-                "ai_processed": ai_processed,
-            },
-        }
+        print(f"[Process] Completed {processing_id} in {processing_time_ms}ms")
 
     except Exception as e:
         # Mark as failed
@@ -284,10 +320,70 @@ async def process_photo(body: ProcessPhotoRequest):
             "status": "failed",
             "error_message": str(e)[:500],
         }).eq("id", processing_id).execute()
+        db.table("photos").update({"status": "failed"}).eq("id", photo_id).execute()
+        print(f"[Process] Failed {processing_id}: {e}")
 
-        db.table("photos").update({"status": "failed"}).eq("id", body.photo_id).execute()
 
-        raise HTTPException(500, f"Processing failed: {str(e)}")
+# ── Status mapping for progress ──
+
+STATUS_PROGRESS = {
+    "pending": {"progress": 5, "text": "Memulai proses..."},
+    "bg_removal": {"progress": 15, "text": "Menghapus background..."},
+    "compositing": {"progress": 40, "text": "Menggabungkan dengan latar & maskot..."},
+    "ai_enhance": {"progress": 65, "text": "AI Enhancement sedang berjalan..."},
+    "generating_qr": {"progress": 90, "text": "Membuat QR Code..."},
+    "completed": {"progress": 100, "text": "Selesai!"},
+    "failed": {"progress": 0, "text": "Gagal memproses foto."},
+}
+
+
+@router.get("/processing/{processing_id}/status")
+async def get_processing_status(processing_id: str):
+    """Poll processing status (real-time progress)."""
+    db = get_supabase()
+
+    result = (
+        db.table("photo_processing")
+        .select("id, status, processed_url, processing_time_ms, error_message")
+        .eq("id", processing_id)
+        .execute()
+    )
+    if not result.data:
+        raise HTTPException(404, "Processing record not found")
+
+    proc = result.data[0]
+    status = proc["status"]
+    info = STATUS_PROGRESS.get(status, {"progress": 0, "text": status})
+
+    data = {
+        "processing_id": proc["id"],
+        "status": status,
+        "progress": info["progress"],
+        "status_text": info["text"],
+    }
+
+    # If completed, include result data
+    if status == "completed":
+        dl_result = (
+            db.table("download_links")
+            .select("*")
+            .eq("processing_id", processing_id)
+            .execute()
+        )
+        link = dl_result.data[0] if dl_result.data else None
+        data.update({
+            "processed_url": proc["processed_url"],
+            "processing_time_ms": proc["processing_time_ms"],
+            "download_code": link["download_code"] if link else None,
+            "download_url": link["download_url"] if link else None,
+            "qr_code_url": link["qr_code_url"] if link else None,
+        })
+
+    # If failed, include error
+    if status == "failed":
+        data["error_message"] = proc.get("error_message", "Unknown error")
+
+    return {"success": True, "message": "Status retrieved", "data": data}
 
 
 @router.get("/photo/{photo_id}")
@@ -339,6 +435,13 @@ async def download_by_code(download_code: str):
         raise HTTPException(404, "Download link not found or expired")
 
     link = result.data[0]
+
+    # Check expiry
+    if link.get("expires_at"):
+        expires_at = datetime.fromisoformat(link["expires_at"].replace("Z", "+00:00"))
+        if datetime.now(timezone.utc) > expires_at:
+            db.table("download_links").update({"is_active": False}).eq("id", link["id"]).execute()
+            raise HTTPException(410, "Download link has expired")
 
     if link["download_count"] >= link["max_downloads"]:
         raise HTTPException(410, "Download limit reached")

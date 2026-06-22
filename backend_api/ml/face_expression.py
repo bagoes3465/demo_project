@@ -1,95 +1,75 @@
 """
 AI Photobooth - Face Expression Detection
-Uses trained YOLO model from machine_learning/Face_Expression
+Calls the deployed YOLO model via Hugging Face Space API
+(cuplis123/facial-emotion-cpls) instead of loading the model locally.
 """
-import numpy as np
+import io
+import requests
 from PIL import Image
-from pathlib import Path
 from config import settings
 
-# Expression class names matching the trained model (data.yaml)
-EXPRESSION_CLASSES = ["angry", "happy", "neutral", "sad", "surprise"]
-
 # Indonesian labels for display
+# (must match the 3-class model deployed on the HF Space: happy, normal, sad)
 EXPRESSION_LABELS = {
-    "angry": "Marah",
     "happy": "Senang",
-    "neutral": "Netral",
+    "normal": "Netral",
     "sad": "Sedih",
-    "surprise": "Terkejut",
 }
 
-_model = None
 
-
-def _load_model():
-    """Load YOLO face expression model (lazy loading)."""
-    global _model
-    if _model is not None:
-        return _model
-
-    from ultralytics import YOLO
-
-    model_path = Path(settings.face_expression_model_path)
-    if model_path.exists():
-        _model = YOLO(str(model_path))
-        print(f"Face expression model loaded: {model_path}")
-    else:
-        # Fallback to base model
-        fallback = Path(settings.yolo_fallback_model_path)
-        if fallback.exists():
-            _model = YOLO(str(fallback))
-            print(f"Fallback model loaded: {fallback}")
-        else:
-            print("No face expression model found")
-            return None
-
-    return _model
-
-
-def detect_expression(image: Image.Image, confidence_threshold: float = 0.3) -> list[dict]:
+def detect_expression(image: Image.Image, confidence_threshold: float | None = None) -> list[dict]:
     """
-    Detect face expressions in an image.
+    Detect face expressions in an image by calling the Face Emotion Detection API.
 
-    Returns list of dicts:
+    Returns list of dicts (sorted by confidence descending), matching the
+    previous local-inference return shape so callers don't need to change:
         [{"expression": "happy", "expression_label": "Senang",
           "confidence": 0.92, "bbox": [x1, y1, x2, y2]}]
+
+    Returns an empty list on any failure (API down, no face detected, etc.)
+    so callers can safely treat "no detection" as a non-fatal case.
     """
-    model = _load_model()
-    if model is None:
+    api_url = (settings.face_expression_api_url or "").rstrip("/")
+    if not api_url:
+        print("Face expression API URL not configured")
         return []
 
-    # Convert PIL to numpy array for YOLO
-    img_array = np.array(image.convert("RGB"))
+    timeout = settings.face_expression_api_timeout_seconds
 
     try:
-        results = model(img_array, conf=confidence_threshold, verbose=False)
+        # Encode the PIL image as JPEG bytes for upload
+        buffer = io.BytesIO()
+        image.convert("RGB").save(buffer, format="JPEG", quality=90)
+        buffer.seek(0)
+
+        files = {"file": ("photo.jpg", buffer, "image/jpeg")}
+        response = requests.post(f"{api_url}/predict", files=files, timeout=timeout)
+        response.raise_for_status()
+        result = response.json()
+
     except Exception as e:
-        print(f"Face expression detection error: {e}")
+        print(f"Face expression API call failed: {e}")
+        return []
+
+    if not result.get("success"):
+        # e.g. {"success": false, "error": "No face detected in image"}
         return []
 
     detections = []
-    for result in results:
-        boxes = result.boxes
-        if boxes is None:
-            continue
-        for box in boxes:
-            cls_id = int(box.cls[0])
-            conf = float(box.conf[0])
-            x1, y1, x2, y2 = map(int, box.xyxy[0].tolist())
+    for det in result.get("detections", []):
+        expr = det.get("emotion", "unknown")
+        bbox = det.get("bbox", {})
+        detections.append({
+            "expression": expr,
+            "expression_label": EXPRESSION_LABELS.get(expr, expr),
+            "confidence": round(float(det.get("confidence", 0.0)), 4),
+            "bbox": [
+                int(bbox.get("x1", 0)),
+                int(bbox.get("y1", 0)),
+                int(bbox.get("x2", 0)),
+                int(bbox.get("y2", 0)),
+            ],
+        })
 
-            if cls_id < len(EXPRESSION_CLASSES):
-                expr = EXPRESSION_CLASSES[cls_id]
-            else:
-                expr = "unknown"
-
-            detections.append({
-                "expression": expr,
-                "expression_label": EXPRESSION_LABELS.get(expr, expr),
-                "confidence": round(conf, 4),
-                "bbox": [x1, y1, x2, y2],
-            })
-
-    # Sort by confidence descending
     detections.sort(key=lambda d: d["confidence"], reverse=True)
     return detections
