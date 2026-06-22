@@ -72,15 +72,13 @@ body {
 }
 
 .pb-logo-circle {
-  width: 40px;
-  height: 40px;
-  border-radius: 50%;
-  background: linear-gradient(135deg, var(--green), #059669);
+  width: 60px;
+  height: 60px;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-weight: 700;
-  font-size: 18px;
+  object-fit: contain;
+  flex-shrink: 0;
 }
 
 .pb-title-block { display: flex; flex-direction: column; }

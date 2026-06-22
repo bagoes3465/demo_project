@@ -67,7 +67,7 @@ function App() {
     setPage('processing');
   };
 
-  // Processing: call process API
+  // Processing: call process API (now returns immediately with processing_id)
   const handleProcess = async () => {
     try {
       const result = await api.processPhoto(
@@ -76,11 +76,21 @@ function App() {
         customization.mascotId,
         customization.filterId,
       );
+      // result now contains { processing_id, photo_id, status: "pending" }
       setResultData(result);
-      setPage('result');
     } catch (err) {
-      showError('Gagal memproses foto', err.message);
+      showError('Gagal memulai proses foto', err.message);
     }
+  };
+
+  // Called by Processing page when ML pipeline completes
+  const handleProcessingComplete = (completedData) => {
+    setResultData(completedData);
+    setPage('result');
+  };
+
+  const handleProcessingError = (errorMsg) => {
+    showError('Gagal memproses foto', errorMsg);
   };
 
   return (
@@ -107,7 +117,14 @@ function App() {
           onNext={handleCustomize}
         />
       )}
-      {page === 'processing' && <Processing onProcess={handleProcess} />}
+      {page === 'processing' && (
+        <Processing
+          onProcess={handleProcess}
+          processingId={resultData?.processing_id}
+          onComplete={handleProcessingComplete}
+          onError={handleProcessingError}
+        />
+      )}
       {page === 'result' && (
         <Result result={resultData} onHome={resetAll} />
       )}

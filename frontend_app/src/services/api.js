@@ -64,6 +64,11 @@ export const api = {
     return res.data;
   },
 
+  getProcessingStatus: async (processingId) => {
+    const res = await request(`/photobooth/processing/${processingId}/status`);
+    return res.data;
+  },
+
   getPhoto: async (photoId) => {
     const res = await request(`/photobooth/photo/${photoId}`);
     return res.data;

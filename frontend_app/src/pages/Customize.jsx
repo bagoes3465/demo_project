@@ -2,12 +2,14 @@ import React, { useState, useEffect } from 'react';
 import PrimaryButton from '../components/PrimaryButton';
 import { api } from '../services/api';
 import '../styles/customize.css';
+import madiun_logo from '../assets/madiun.png';
 
 export default function Customize({ capturedImage, onBack, onNext }) {
   const [backgrounds, setBackgrounds] = useState([]);
   const [mascots, setMascots] = useState([]);
   const [filters, setFilters] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [expired, setExpired] = useState(false);
 
   const [selectedBg, setSelectedBg] = useState('');
   const [selectedMascot, setSelectedMascot] = useState('');
@@ -29,10 +31,14 @@ export default function Customize({ capturedImage, onBack, onNext }) {
   }, []);
 
   useEffect(() => {
-    if (timeLeft <= 0) return;
+    if (timeLeft <= 0) {
+      setExpired(true);
+      onBack();
+      return;
+    }
     const t = setTimeout(() => setTimeLeft(timeLeft - 1), 1000);
     return () => clearTimeout(t);
-  }, [timeLeft]);
+  }, [timeLeft, onBack]);
 
   const formatTime = (s) => `${Math.floor(s / 60)}:${(s % 60).toString().padStart(2, '0')}`;
 
@@ -57,7 +63,7 @@ export default function Customize({ capturedImage, onBack, onNext }) {
     <div className="pb-page pb-customize">
       <header className="pb-header">
         <div className="pb-header-left">
-          <div className="pb-logo-circle">M</div>
+          <img src={madiun_logo} alt="Logo Madiun" className="pb-logo-circle" />
           <div className="pb-title-block">
             <div className="pb-appname">Kota Madiun</div>
             <div className="pb-subtitle">AI Photobooth</div>
@@ -125,7 +131,7 @@ export default function Customize({ capturedImage, onBack, onNext }) {
 
       <div className="pb-bottom-action pb-bottom-duo">
         <PrimaryButton variant="secondary" onClick={onBack}>← Kembali</PrimaryButton>
-        <PrimaryButton onClick={handleSave}>Simpan & Proses ✨</PrimaryButton>
+        <PrimaryButton onClick={handleSave} disabled={expired}>Simpan & Proses ✨</PrimaryButton>
       </div>
     </div>
   );

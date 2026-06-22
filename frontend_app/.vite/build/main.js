@@ -475,12 +475,19 @@ var electronSquirrelStartup = check();
 const started = /* @__PURE__ */ getDefaultExportFromCjs(electronSquirrelStartup);
 if (started) require$$3$1.app.quit();
 const isDev = process.env.NODE_ENV === "development" || true;
+const getAssetPath = (assetName) => {
+  {
+    return path$1.resolve(process.cwd(), "src", "assets", assetName);
+  }
+};
 const createWindow = () => {
   const mainWindow = new require$$3$1.BrowserWindow({
     width: 1080,
     height: 1920,
     fullscreen: !isDev,
     frame: isDev,
+    icon: getAssetPath("icons/icons/win/icon.ico"),
+    // Gunakan icon yang baru digenerate
     webPreferences: {
       preload: path$1.join(__dirname, "preload.js"),
       contextIsolation: true

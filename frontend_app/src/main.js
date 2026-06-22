@@ -6,12 +6,23 @@ if (started) app.quit();
 
 const isDev = process.env.NODE_ENV === 'development' || !!MAIN_WINDOW_VITE_DEV_SERVER_URL;
 
+const getAssetPath = (assetName) => {
+  if (isDev) {
+    // Gunakan process.cwd() untuk get project root
+    return path.resolve(process.cwd(), 'src', 'assets', assetName);
+  } else {
+    // Di production, assets di folder resources
+    return path.join(process.resourcesPath, 'assets', assetName);
+  }
+};
+
 const createWindow = () => {
   const mainWindow = new BrowserWindow({
     width: 1080,
     height: 1920,
     fullscreen: !isDev,
     frame: isDev,
+    icon: getAssetPath('icons/icons/win/icon.ico'), // Gunakan icon yang baru digenerate
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
