@@ -487,6 +487,40 @@ async def download_by_code(download_code: str):
 
 
 # ── Auto-Cleanup ──────────────────────────────────────────
+#
+# SCHEMA REALITY CHECK (see actual constraints):
+#   face_expressions.photo_id   -> photos.id   (FK, NO ON DELETE action -> RESTRICT)
+#   photo_processing.photo_id   -> photos.id   (FK, NO ON DELETE action -> RESTRICT)
+#   download_links.processing_id -> photo_processing.id (FK, RESTRICT)
+#
+# Because face_expressions and photo_processing are intentionally KEPT
+# (see rationale below), `photos` rows can NEVER be deleted while those
+# child rows still reference them — Postgres will raise a foreign key
+# violation. The previous version of this function tried to delete
+# `photos` anyway, which silently failed inside the try/except and could
+# leave storage files deleted while the `photos` DB row stayed behind
+# (inconsistent partial cleanup).
+#
+# This version instead:
+#   1. Deletes the actual image FILES from storage (the sensitive part —
+#      visitor faces). This is independent of SQL FKs.
+#   2. Clears `photos.original_url` / `original_path` (anonymizes the row
+#      instead of deleting it) so no working link to a visitor's photo
+#      remains, without violating the FK from face_expressions/photo_processing.
+#   3. Deletes `download_links` (safe — nothing references it).
+#   4. Leaves face_expressions, photo_processing, and photo_sessions
+#      untouched, since they hold no images/PII:
+#        - face_expressions: only an emotion label, needed by
+#          /photobooth/mood/weekly for a rolling 7-day aggregate.
+#        - photo_processing: only timing/status metadata, useful for
+#          performance monitoring and debugging failed runs.
+#        - photo_sessions: already only updated to "expired" elsewhere.
+#
+# If you truly want `photos` rows removed eventually (not just
+# anonymized), do it via a separate long-term retention job that deletes
+# the whole session graph in FK-safe order (face_expressions ->
+# download_links -> photo_processing -> photos -> photo_sessions) after
+# e.g. 90 days — decoupled from this 5-minute privacy cleanup.
 
 def _schedule_cleanup(
     session_id: str,
@@ -495,14 +529,21 @@ def _schedule_cleanup(
     processed_path: str,
     qr_path: str,
 ):
-    """Schedule deletion of all session data after CLEANUP_DELAY_SECONDS."""
+    """Remove privacy-sensitive image files shortly after processing
+    completes, and anonymize the `photos` row. Statistical/metadata
+    tables (face_expressions, photo_processing, photo_sessions) are
+    preserved — see module-level comment above for why this is required
+    by the current foreign key constraints.
+    """
 
     def _do_cleanup():
         time.sleep(CLEANUP_DELAY_SECONDS)
         try:
             db = get_supabase()
 
-            # 1. Delete files from storage
+            # 1. Delete files from storage (the actual identifiable images).
+            #    Storage objects are not bound by SQL foreign keys, so each
+            #    of these can be removed independently and safely.
             try:
                 db.storage.from_("processed").remove([processed_path])
             except Exception:
@@ -512,27 +553,40 @@ def _schedule_cleanup(
             except Exception:
                 pass
 
-            # Delete original photos + preview
-            photos_result = db.table("photos").select("original_path").eq("session_id", session_id).execute()
+            photos_result = db.table("photos").select("id, original_path").eq("session_id", session_id).execute()
             for p in photos_result.data or []:
                 try:
                     db.storage.from_("photos").remove([p["original_path"]])
                 except Exception:
                     pass
-            # Delete preview
             try:
                 db.storage.from_("photos").remove([f"{session_id}/preview_nobg.png"])
             except Exception:
                 pass
 
-            # 2. Delete database records (cascading from session)
+            # 2. Anonymize (not delete) the `photos` row(s) for this session.
+            #    We CANNOT delete them: face_expressions.photo_id and
+            #    photo_processing.photo_id reference photos.id with no
+            #    ON DELETE action, so Postgres would reject the delete.
+            #    Clearing the URL/path achieves the same privacy goal
+            #    (no working link to the visitor's image survives) while
+            #    keeping the row's id valid for existing foreign keys.
+            db.table("photos").update({
+                "original_path": None,
+                "original_url": None,
+            }).eq("session_id", session_id).execute()
+
+            # 3. Delete download_links — safe, nothing references this table.
             db.table("download_links").delete().eq("processing_id", processing_id).execute()
-            db.table("photo_processing").delete().eq("photo_id", photo_id).execute()
-            db.table("face_expressions").delete().eq("photo_id", photo_id).execute()
-            db.table("photos").delete().eq("session_id", session_id).execute()
+
+            # NOTE: face_expressions, photo_processing, and photo_sessions
+            # are intentionally NOT touched here — see module comment above.
+
+            # photo_sessions is never deleted, only marked expired.
             db.table("photo_sessions").update({"status": "expired"}).eq("id", session_id).execute()
 
-            print(f"[Cleanup] Session {session_id} cleaned up after {CLEANUP_DELAY_SECONDS}s")
+            print(f"[Cleanup] Session {session_id} image files removed and photos anonymized "
+                  f"after {CLEANUP_DELAY_SECONDS}s (face_expressions and photo_processing preserved)")
         except Exception as e:
             print(f"[Cleanup] Failed for session {session_id}: {e}")
 
