@@ -30,8 +30,8 @@ export default function ErrorPage({ message, detail, onRetry, onHome }) {
       </main>
 
       <div className="pb-bottom-action pb-bottom-duo">
-        <PrimaryButton onClick={onRetry}>🔄 Coba Lagi</PrimaryButton>
-        <PrimaryButton variant="secondary" onClick={onHome}>🏠 Kembali</PrimaryButton>
+        <PrimaryButton onClick={onRetry}>Coba Lagi</PrimaryButton>
+        <PrimaryButton variant="secondary" onClick={onHome}>Kembali</PrimaryButton>
       </div>
     </div>
   );

@@ -3,8 +3,6 @@ node_modules/
 .yolo11n.pt
 .yolo26n.pt
 .yolov8s.pt
-node_modules
-Frontend
 .venv
 machine_learning/
 my-app/

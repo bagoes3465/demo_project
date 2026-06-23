@@ -5,8 +5,9 @@
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  padding: 40px 24px;
-  gap: 40px;
+  padding: 24px 20px;
+  gap: 28px;
+  overflow: hidden;
 }
 
 .pb-hero {
@@ -14,62 +15,115 @@
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 16px;
+  gap: 14px;
 }
 
 .pb-hero-icon {
-  font-size: 64px;
-  filter: drop-shadow(0 4px 12px rgba(0,0,0,0.3));
+  width: 90px;
+  height: 90px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 4px;
+}
+
+.pb-hero-logo {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  filter: drop-shadow(0 8px 24px rgba(0, 0, 0, 0.2));
 }
 
 .pb-hero-title {
   font-size: 36px;
   font-weight: 800;
   line-height: 1.2;
-  text-shadow: 0 2px 10px rgba(0,0,0,0.2);
+  text-shadow: 0 2px 10px rgba(0, 0, 0, 0.2);
+  letter-spacing: -0.5px;
+}
+
+.pb-hero-subtitle {
+  font-size: 14px;
+  font-weight: 500;
+  opacity: 0.9;
+  margin-top: -8px;
+  letter-spacing: 0.5px;
 }
 
 .pb-hero-desc {
   max-width: 480px;
-  font-size: 16px;
+  font-size: 13px;
   opacity: 0.85;
   line-height: 1.5;
+  font-weight: 400;
 }
 
 /* Features */
 .pb-features {
   display: flex;
-  gap: 20px;
+  gap: 14px;
   flex-wrap: wrap;
   justify-content: center;
 }
 
 .pb-feature {
-  background: var(--glass-bg);
-  backdrop-filter: blur(10px);
-  border: 1px solid var(--glass-border);
-  border-radius: var(--radius);
-  padding: 24px 20px;
-  width: 180px;
+  background: rgba(255, 255, 255, 0.12);
+  backdrop-filter: blur(16px);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 14px;
+  padding: 16px 18px;
+  width: 160px;
   text-align: center;
-  transition: transform 0.2s;
+  transition: all 0.3s ease;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
 }
-.pb-feature:hover { transform: translateY(-4px); }
+.pb-feature:hover { 
+  transform: translateY(-6px);
+  background: rgba(255, 255, 255, 0.15);
+  border-color: rgba(255, 255, 255, 0.3);
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.15);
+}
 
-.pb-feature-icon { font-size: 32px; margin-bottom: 8px; }
-.pb-feature-title { font-weight: 600; font-size: 14px; margin-bottom: 4px; }
-.pb-feature-desc { font-size: 12px; opacity: 0.7; }
+.pb-feature-icon { 
+  font-size: 28px; 
+  margin-bottom: 6px; 
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.pb-feature-icon.pb-icon-bg {
+  width: 44px;
+  height: 44px;
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 10px;
+  font-size: 20px;
+}
+
+.pb-feature-title { 
+  font-weight: 700; 
+  font-size: 12px; 
+  margin-bottom: 3px;
+  letter-spacing: 0.3px;
+}
+.pb-feature-desc { 
+  font-size: 11px; 
+  opacity: 0.75;
+  font-weight: 400;
+}
 
 /* ─── Mood Minggu Ini ─────────────────────────── */
 .pb-mood-weekly {
   width: 100%;
-  max-width: 480px;
+  max-width: 420px;
   border: 1px solid;
-  border-radius: var(--radius);
-  padding: 20px 24px;
+  border-radius: 14px;
+  padding: 14px 16px;
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: 10px;
+  backdrop-filter: blur(12px);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
 }
 
 .pb-mood-weekly-header {
@@ -85,9 +139,9 @@
   align-items: center;
   gap: 16px;
 }
-.pb-mood-dominant-emoji { font-size: 48px; line-height: 1; }
-.pb-mood-dominant-label { font-size: 22px; font-weight: 800; }
-.pb-mood-dominant-sub { font-size: 12px; opacity: 0.6; margin-top: 2px; }
+.pb-mood-dominant-emoji { font-size: 36px; line-height: 1; }
+.pb-mood-dominant-label { font-size: 18px; font-weight: 800; }
+.pb-mood-dominant-sub { font-size: 10px; opacity: 0.6; margin-top: 1px; }
 
 .pb-mood-bars {
   display: flex;

@@ -65,7 +65,7 @@ export default function Result({ result, onHome }) {
             className="pb-result-mood"
             style={{ background: moodCfg.bg, borderColor: moodCfg.border }}
           >
-            <div className="pb-result-mood-title">✨ Mood Anda Hari Ini</div>
+            <div className="pb-result-mood-title">Ekspresi Terdeteksi</div>
             <div className="pb-result-mood-body">
               <span className="pb-result-mood-emoji">{moodCfg.emoji}</span>
               <div>
@@ -81,18 +81,18 @@ export default function Result({ result, onHome }) {
         {/* QR Code */}
         <div className="pb-result-qr">
           <img src={result.qr_code_url} alt="QR Code" className="pb-qr-image" />
-          <h3>Scan untuk Unduh</h3>
-          <p>Arahkan kamera HP ke QR Code ini</p>
+          <h3>Scan untuk Unduh Foto</h3>
+          <p>Arahkan kamera perangkat ke QR Code</p>
         </div>
 
         {/* Info */}
         <div className="pb-result-info">
           <div className="pb-info-row">
-            <span className="pb-info-label">Kode Download:</span>
+            <span className="pb-info-label">Kode:</span>
             <span className="pb-info-value">{result.download_code}</span>
           </div>
           <div className="pb-info-row">
-            <span className="pb-info-label">Waktu proses:</span>
+            <span className="pb-info-label">Waktu Proses:</span>
             <span className="pb-info-value">
               {result.processing_time_ms ? `${(result.processing_time_ms / 1000).toFixed(1)}s` : '-'}
             </span>
@@ -110,7 +110,7 @@ export default function Result({ result, onHome }) {
       </main>
 
       <div className="pb-bottom-action">
-        <PrimaryButton onClick={onHome}>📷 Foto Baru</PrimaryButton>
+        <PrimaryButton onClick={onHome}>Foto Baru</PrimaryButton>
       </div>
     </div>
   );

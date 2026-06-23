@@ -92,10 +92,10 @@ export default function Camera({ onBack, onCaptured }) {
 
       <div className="pb-camera-actions">
         <PrimaryButton variant="secondary" onClick={() => { stopCamera(); onBack(); }}>
-          ← Kembali
+          Kembali
         </PrimaryButton>
         <PrimaryButton onClick={handleCapture} disabled={capturing}>
-          {capturing ? `${countdown}...` : '📷 Ambil Foto'}
+          {capturing ? `${countdown}...` : 'Ambil Foto'}
         </PrimaryButton>
       </div>
     </div>

@@ -7,6 +7,7 @@ const require$$0 = require("tty");
 const require$$1 = require("util");
 const require$$3 = require("fs");
 const require$$4 = require("net");
+const http = require("http");
 function getDefaultExportFromCjs(x) {
   return x && x.__esModule && Object.prototype.hasOwnProperty.call(x, "default") ? x["default"] : x;
 }
@@ -475,6 +476,58 @@ var electronSquirrelStartup = check();
 const started = /* @__PURE__ */ getDefaultExportFromCjs(electronSquirrelStartup);
 if (started) require$$3$1.app.quit();
 const isDev = process.env.NODE_ENV === "development" || true;
+let backendProcess = null;
+const BACKEND_PORT = 8001;
+const BACKEND_URL = `http://localhost:${BACKEND_PORT}`;
+const startBackend = () => {
+  return new Promise((resolve, reject) => {
+    try {
+      let backendPath;
+      let pythonExe;
+      if (isDev) {
+        const projectRoot = path$1.resolve(process.cwd(), "..");
+        pythonExe = path$1.join(projectRoot, ".venv", "Scripts", "python.exe");
+        backendPath = path$1.join(projectRoot, "backend_api", "main.py");
+        console.log("Project root:", projectRoot);
+        console.log("Python executable:", pythonExe);
+        console.log("Backend path:", backendPath);
+        backendProcess = require$$1$1.spawn(pythonExe, [backendPath], {
+          stdio: "inherit",
+          cwd: path$1.join(projectRoot, "backend_api"),
+          env: { ...process.env, PYTHONUNBUFFERED: "1" }
+        });
+      }
+      backendProcess.on("error", (err) => {
+        console.error("Failed to start backend:", err);
+        reject(err);
+      });
+      let attempts = 0;
+      const maxAttempts = 30;
+      const checkBackendReady = () => {
+        if (attempts >= maxAttempts) {
+          reject(new Error("Backend failed to start within timeout"));
+          return;
+        }
+        const req = http.get(`${BACKEND_URL}/api/health`, (res) => {
+          if (res.statusCode === 200) {
+            console.log("Backend is ready!");
+            resolve();
+          } else {
+            attempts++;
+            setTimeout(checkBackendReady, 1e3);
+          }
+        });
+        req.on("error", () => {
+          attempts++;
+          setTimeout(checkBackendReady, 1e3);
+        });
+      };
+      setTimeout(checkBackendReady, 500);
+    } catch (err) {
+      reject(err);
+    }
+  });
+};
 const getAssetPath = (assetName) => {
   {
     return path$1.resolve(process.cwd(), "src", "assets", assetName);
@@ -500,12 +553,25 @@ const createWindow = () => {
     mainWindow.webContents.openDevTools();
   }
 };
-require$$3$1.app.whenReady().then(() => {
-  createWindow();
+require$$3$1.app.whenReady().then(async () => {
+  try {
+    await startBackend();
+    createWindow();
+  } catch (err) {
+    console.error("Failed to start application:", err);
+    require$$3$1.app.quit();
+  }
   require$$3$1.app.on("activate", () => {
     if (require$$3$1.BrowserWindow.getAllWindows().length === 0) createWindow();
   });
 });
 require$$3$1.app.on("window-all-closed", () => {
+  if (backendProcess) {
+    try {
+      backendProcess.kill();
+    } catch (err) {
+      console.error("Error killing backend:", err);
+    }
+  }
   if (process.platform !== "darwin") require$$3$1.app.quit();
 });

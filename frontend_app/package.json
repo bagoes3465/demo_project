@@ -7,8 +7,9 @@
   "private": true,
   "scripts": {
     "start": "electron-forge start",
-    "package": "electron-forge package",
-    "make": "electron-forge make"
+    "package": "npm run build:backend && electron-forge package",
+    "make": "npm run build:backend && electron-forge make",
+    "build:backend": "node scripts/build-backend.js"
   },
   "author": "Photobooth Kota Madiun",
   "license": "MIT",

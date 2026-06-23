@@ -40,11 +40,13 @@ export default function Home({ onStart }) {
 
       <main className="pb-home-main">
         <div className="pb-hero">
-          <div className="pb-hero-icon">📷</div>
-          <h1 className="pb-hero-title">AI PHOTOBOOTH<br />KOTA MADIUN</h1>
+          <div className="pb-hero-icon">
+            <img src={madiun_logo} alt="Madiun City" className="pb-hero-logo" />
+          </div>
+          <h1 className="pb-hero-title">AI Photobooth</h1>
+          <p className="pb-hero-subtitle">Kota Madiun</p>
           <p className="pb-hero-desc">
-            Abadikan momen Anda dengan latar belakang landmark Kota Madiun
-            menggunakan teknologi AI terkini.
+            Abadikan momen istimewa Anda dengan latar belakang landmark ikonik Kota Madiun menggunakan teknologi AI terkini.
           </p>
         </div>
 
@@ -55,7 +57,7 @@ export default function Home({ onStart }) {
             style={{ borderColor: moodCfg?.border, background: moodCfg?.bg }}
           >
             <div className="pb-mood-weekly-header">
-              <span className="pb-mood-weekly-title">😄 Mood Madiun Minggu Ini</span>
+              <span className="pb-mood-weekly-title">Mood Kota Minggu Ini</span>
               <span className="pb-mood-weekly-total">{weeklyMood.total} foto</span>
             </div>
             <div className="pb-mood-dominant">
@@ -87,19 +89,19 @@ export default function Home({ onStart }) {
 
         <section className="pb-features">
           <div className="pb-feature">
-            <div className="pb-feature-icon">🖼️</div>
-            <div className="pb-feature-title">Latar Kota Madiun</div>
-            <div className="pb-feature-desc">Landmark ikonik kota</div>
+            <div className="pb-feature-icon pb-icon-bg">🏛️</div>
+            <div className="pb-feature-title">Landmark Madiun</div>
+            <div className="pb-feature-desc">Latar belakang kota terbaik</div>
           </div>
           <div className="pb-feature">
-            <div className="pb-feature-icon">🎨</div>
-            <div className="pb-feature-title">Maskot Interaktif</div>
+            <div className="pb-feature-icon pb-icon-bg">🎭</div>
+            <div className="pb-feature-title">Maskot Karakter</div>
             <div className="pb-feature-desc">Relo, Madya & Rasa</div>
           </div>
           <div className="pb-feature">
-            <div className="pb-feature-icon">✨</div>
-            <div className="pb-feature-title">Filter & Efek AI</div>
-            <div className="pb-feature-desc">Kualitas profesional</div>
+            <div className="pb-feature-icon pb-icon-bg">⚡</div>
+            <div className="pb-feature-title">Teknologi AI</div>
+            <div className="pb-feature-desc">Hasil profesional instan</div>
           </div>
         </section>
       </main>
@@ -110,7 +112,7 @@ export default function Home({ onStart }) {
       </footer>
 
       <div className="pb-bottom-action">
-        <PrimaryButton onClick={onStart}>📷 Mulai Foto</PrimaryButton>
+        <PrimaryButton onClick={onStart}>Mulai Foto</PrimaryButton>
       </div>
     </div>
   );

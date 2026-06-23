@@ -8,6 +8,7 @@ module.exports = {
     icon: path.join(__dirname, 'src', 'assets', 'icons', 'icons', 'win', 'icon'),
     extraResource: [
       path.join(__dirname, 'src', 'assets'),
+      path.join(__dirname, '../backend_dist'), // Include built backend
     ],
   },
   rebuildConfig: {},

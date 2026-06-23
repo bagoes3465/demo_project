@@ -74,11 +74,11 @@ export default function Customize({ capturedImage, onBack, onNext }) {
 
       <main className="pb-customize-main">
         <h2 className="pb-section-title">Kustomisasi Foto</h2>
-        <p className="pb-customize-desc">Pilih background, maskot, dan filter untuk foto kamu</p>
+        <p className="pb-customize-desc">Pilih latar, karakter, dan efek untuk foto Anda</p>
 
         {/* Backgrounds */}
         <section className="pb-section">
-          <h3>🖼️ Pilih Background</h3>
+          <h3>🏛️ Latar Belakang</h3>
           <div className="pb-grid">
             {backgrounds.map((bg) => (
               <div
@@ -96,7 +96,7 @@ export default function Customize({ capturedImage, onBack, onNext }) {
 
         {/* Mascots */}
         <section className="pb-section">
-          <h3>🎭 Pilih Maskot</h3>
+          <h3>🎭 Karakter Maskot</h3>
           <div className="pb-grid">
             {mascots.map((m) => (
               <div
@@ -114,7 +114,7 @@ export default function Customize({ capturedImage, onBack, onNext }) {
 
         {/* Filters */}
         <section className="pb-section">
-          <h3>✨ Pilih Filter</h3>
+          <h3>✨ Efek & Filter</h3>
           <div className="pb-filter-list">
             {filters.map((f) => (
               <button
@@ -130,8 +130,8 @@ export default function Customize({ capturedImage, onBack, onNext }) {
       </main>
 
       <div className="pb-bottom-action pb-bottom-duo">
-        <PrimaryButton variant="secondary" onClick={onBack}>← Kembali</PrimaryButton>
-        <PrimaryButton onClick={handleSave} disabled={expired}>Simpan & Proses ✨</PrimaryButton>
+        <PrimaryButton variant="secondary" onClick={onBack}>Kembali</PrimaryButton>
+        <PrimaryButton onClick={handleSave} disabled={expired}>Simpan & Proses</PrimaryButton>
       </div>
     </div>
   );

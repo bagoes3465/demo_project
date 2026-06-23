@@ -6,7 +6,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 40px 24px;
+  padding: 24px 16px;
 }
 
 .pb-error-center {
@@ -15,30 +15,44 @@
   flex-direction: column;
   align-items: center;
   gap: 16px;
-  max-width: 400px;
+  max-width: 380px;
+  background: rgba(255, 255, 255, 0.08);
+  backdrop-filter: blur(16px);
+  border: 1px solid rgba(239, 68, 68, 0.3);
+  border-radius: 16px;
+  padding: 28px 24px;
+  box-shadow: 0 12px 48px rgba(239, 68, 68, 0.15);
 }
 
 .pb-error-icon {
-  font-size: 72px;
-  filter: drop-shadow(0 4px 12px rgba(239, 68, 68, 0.4));
+  font-size: 64px;
+  filter: drop-shadow(0 8px 20px rgba(239, 68, 68, 0.4));
 }
 
 .pb-error-center h2 {
-  font-size: 24px;
-  font-weight: 700;
+  font-size: 22px;
+  font-weight: 800;
+  letter-spacing: -0.3px;
 }
 
 .pb-error-msg {
-  font-size: 16px;
+  font-size: 13px;
   opacity: 0.9;
+  font-weight: 500;
+  line-height: 1.5;
 }
 
 .pb-error-detail {
   font-size: 13px;
-  opacity: 0.6;
-  background: rgba(239, 68, 68, 0.1);
-  padding: 10px 16px;
-  border-radius: var(--radius-sm);
-  border: 1px solid rgba(239, 68, 68, 0.2);
+  opacity: 0.7;
+  background: rgba(239, 68, 68, 0.15);
+  padding: 14px 18px;
+  border-radius: 12px;
+  border: 1px solid rgba(239, 68, 68, 0.3);
   word-break: break-word;
+  font-family: 'Courier New', monospace;
+  font-weight: 400;
+  text-align: left;
+  max-height: 120px;
+  overflow-y: auto;
 }

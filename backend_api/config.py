@@ -20,7 +20,7 @@ class Settings(BaseSettings):
 
     # API Server
     api_host: str = "0.0.0.0"
-    api_port: int = 8000
+    api_port: int = 8001
     debug: bool = True
 
     # AI Enhancement - APIFree.ai (Nano Banana 2 Edit)
