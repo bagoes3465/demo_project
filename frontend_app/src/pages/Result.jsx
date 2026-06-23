@@ -3,14 +3,17 @@ import PrimaryButton from '../components/PrimaryButton';
 import '../styles/result.css';
 import madiun_logo from '../assets/madiun.png';
 
+const MOOD_CONFIG = {
+  happy:  { emoji: '😊', label: 'Senang', color: '#10b981', bg: 'rgba(16,185,129,0.15)', border: 'rgba(16,185,129,0.3)' },
+  normal: { emoji: '😐', label: 'Netral',  color: '#60a5fa', bg: 'rgba(96,165,250,0.15)', border: 'rgba(96,165,250,0.3)' },
+  sad:    { emoji: '😢', label: 'Sedih',   color: '#f59e0b', bg: 'rgba(245,158,11,0.15)', border: 'rgba(245,158,11,0.3)' },
+};
+
 export default function Result({ result, onHome }) {
   const [timeLeft, setTimeLeft] = useState(60);
 
   useEffect(() => {
-    if (timeLeft <= 0) {
-      onHome();
-      return;
-    }
+    if (timeLeft <= 0) { onHome(); return; }
     const t = setTimeout(() => setTimeLeft(timeLeft - 1), 1000);
     return () => clearTimeout(t);
   }, [timeLeft, onHome]);
@@ -23,6 +26,9 @@ export default function Result({ result, onHome }) {
       </div>
     );
   }
+
+  const expr = result.face_expression;
+  const moodCfg = expr ? MOOD_CONFIG[expr] : null;
 
   return (
     <div className="pb-page pb-result">
@@ -46,14 +52,31 @@ export default function Result({ result, onHome }) {
         </div>
 
         <h1 className="pb-result-title">Hasil Foto Anda</h1>
-        <p className="pb-result-desc">
-          Scan QR Code untuk mengunduh foto Anda.
-        </p>
+        <p className="pb-result-desc">Scan QR Code untuk mengunduh foto Anda.</p>
 
         {/* Processed photo */}
         <div className="pb-result-photo">
           <img src={result.processed_url} alt="Hasil foto" />
         </div>
+
+        {/* ── Mood Anda Hari Ini ── */}
+        {moodCfg && (
+          <div
+            className="pb-result-mood"
+            style={{ background: moodCfg.bg, borderColor: moodCfg.border }}
+          >
+            <div className="pb-result-mood-title">✨ Mood Anda Hari Ini</div>
+            <div className="pb-result-mood-body">
+              <span className="pb-result-mood-emoji">{moodCfg.emoji}</span>
+              <div>
+                <div className="pb-result-mood-label" style={{ color: moodCfg.color }}>
+                  {result.face_expression_label || moodCfg.label}
+                </div>
+                <div className="pb-result-mood-sub">Terdeteksi saat foto diambil</div>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* QR Code */}
         <div className="pb-result-qr">
@@ -70,7 +93,9 @@ export default function Result({ result, onHome }) {
           </div>
           <div className="pb-info-row">
             <span className="pb-info-label">Waktu proses:</span>
-            <span className="pb-info-value">{result.processing_time_ms ? `${(result.processing_time_ms / 1000).toFixed(1)}s` : '-'}</span>
+            <span className="pb-info-value">
+              {result.processing_time_ms ? `${(result.processing_time_ms / 1000).toFixed(1)}s` : '-'}
+            </span>
           </div>
           <p className="pb-info-note">💡 Foto akan dihapus otomatis dalam 5 menit. Segera scan QR!</p>
         </div>

@@ -59,3 +59,57 @@
 .pb-feature-icon { font-size: 32px; margin-bottom: 8px; }
 .pb-feature-title { font-weight: 600; font-size: 14px; margin-bottom: 4px; }
 .pb-feature-desc { font-size: 12px; opacity: 0.7; }
+
+/* ─── Mood Minggu Ini ─────────────────────────── */
+.pb-mood-weekly {
+  width: 100%;
+  max-width: 480px;
+  border: 1px solid;
+  border-radius: var(--radius);
+  padding: 20px 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.pb-mood-weekly-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+.pb-mood-weekly-title { font-weight: 700; font-size: 15px; }
+.pb-mood-weekly-total { font-size: 12px; opacity: 0.6; }
+
+.pb-mood-dominant {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+.pb-mood-dominant-emoji { font-size: 48px; line-height: 1; }
+.pb-mood-dominant-label { font-size: 22px; font-weight: 800; }
+.pb-mood-dominant-sub { font-size: 12px; opacity: 0.6; margin-top: 2px; }
+
+.pb-mood-bars {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.pb-mood-bar-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.pb-mood-bar-label { font-size: 13px; width: 100px; flex-shrink: 0; }
+.pb-mood-bar-track {
+  flex: 1;
+  height: 8px;
+  background: rgba(255,255,255,0.1);
+  border-radius: 4px;
+  overflow: hidden;
+}
+.pb-mood-bar-fill {
+  height: 100%;
+  border-radius: 4px;
+  transition: width 0.8s ease;
+}
+.pb-mood-bar-pct { font-size: 12px; opacity: 0.7; width: 38px; text-align: right; }

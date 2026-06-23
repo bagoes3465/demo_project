@@ -94,4 +94,10 @@ export const api = {
     const res = await request('/filters');
     return res.data;
   },
+
+  // Mood
+  getMoodWeekly: async () => {
+    const res = await request('/mood/weekly');
+    return res.data;
+  },
 };

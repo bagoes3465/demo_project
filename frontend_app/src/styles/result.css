@@ -68,6 +68,36 @@
   border-radius: var(--radius-sm);
 }
 
+/* ─── Mood Anda Hari Ini ──────────────────────── */
+.pb-result-mood {
+  width: 100%;
+  max-width: 400px;
+  border: 1px solid;
+  border-radius: var(--radius);
+  padding: 16px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.pb-result-mood-title {
+  font-size: 13px;
+  font-weight: 600;
+  opacity: 0.8;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.pb-result-mood-body {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.pb-result-mood-emoji { font-size: 44px; line-height: 1; }
+.pb-result-mood-label { font-size: 24px; font-weight: 800; }
+.pb-result-mood-sub   { font-size: 12px; opacity: 0.6; margin-top: 2px; }
+
 /* QR */
 .pb-result-qr {
   background: var(--glass-bg);

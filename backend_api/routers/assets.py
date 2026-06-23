@@ -2,6 +2,7 @@
 Assets router - backgrounds, mascots, filters
 """
 import traceback
+from datetime import datetime, timezone, timedelta
 from fastapi import APIRouter
 from fastapi.responses import JSONResponse
 from database import get_supabase
@@ -103,6 +104,61 @@ async def get_filters():
             })
 
         return {"success": True, "message": "Filters retrieved", "data": filters}
+    except Exception as e:
+        traceback.print_exc()
+        return JSONResponse(status_code=500, content={"success": False, "error": str(e)})
+
+
+@router.get("/mood/weekly")
+async def get_weekly_mood():
+    """Agregat ekspresi wajah 7 hari terakhir dari tabel face_expressions."""
+    try:
+        db = get_supabase()
+        since = (datetime.now(timezone.utc) - timedelta(days=7)).isoformat()
+
+        result = (
+            db.table("face_expressions")
+            .select("expression")
+            .gte("created_at", since)
+            .execute()
+        )
+
+        counts = {"happy": 0, "normal": 0, "sad": 0}
+        for row in result.data or []:
+            expr = row.get("expression", "").lower()
+            if expr in counts:
+                counts[expr] += 1
+
+        total = sum(counts.values())
+        dominant = max(counts, key=counts.get) if total > 0 else None
+
+        label_map = {
+            "happy": "Senang",
+            "normal": "Netral",
+            "sad": "Sedih",
+        }
+
+        breakdown = []
+        for expr, count in counts.items():
+            breakdown.append({
+                "expression": expr,
+                "label": label_map.get(expr, expr),
+                "count": count,
+                "percent": round((count / total * 100) if total > 0 else 0, 1),
+            })
+        breakdown.sort(key=lambda x: x["count"], reverse=True)
+
+        return {
+            "success": True,
+            "message": "Weekly mood retrieved",
+            "data": {
+                "total": total,
+                "dominant": dominant,
+                "dominant_label": label_map.get(dominant, "-") if dominant else "-",
+                "breakdown": breakdown,
+                "since": since,
+            },
+        }
     except Exception as e:
         traceback.print_exc()
         return JSONResponse(status_code=500, content={"success": False, "error": str(e)})

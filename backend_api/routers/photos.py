@@ -28,7 +28,7 @@ async def upload_photo(
     session_id: str = Form(...),
     photo: UploadFile = File(...),
 ):
-    """Upload a photo to a session, then detect face expression before responding."""
+    """Upload a photo to a session."""
     db = get_supabase()
 
     # Verify session exists and is active
@@ -85,84 +85,62 @@ async def upload_photo(
         raise HTTPException(500, "Failed to save photo record")
 
     photo_data = result.data[0]
-    photo_id = photo_data["id"]
 
-    # Detect face expression SYNCHRONOUSLY — must finish and be saved to DB
-    # before this endpoint responds, so the frontend can rely on it being
-    # present right away (no race condition with /process).
-    expression_result = _detect_and_save_face_expression(photo_id, contents)
+    # Run face expression detection in background thread
+    thread = threading.Thread(
+        target=_detect_face_expression_bg,
+        args=(photo_data["id"], contents),
+        daemon=True,
+    )
+    thread.start()
 
     return {
         "success": True,
         "message": "Photo uploaded",
         "data": {
-            "photo_id": photo_id,
+            "photo_id": photo_data["id"],
             "session_id": session_id,
             "original_url": original_url,
             "photo_number": photo_number,
             "status": "uploaded",
-            "face_expression": expression_result["expression"],
-            "face_expression_label": expression_result["expression_label"],
-            "face_confidence": expression_result["confidence"],
         },
     }
 
 
-def _detect_and_save_face_expression(photo_id: str, image_bytes: bytes) -> dict:
-    """
-    Run face expression detection and persist the result to the database.
-
-    Called synchronously from /upload so the expression is guaranteed to be
-    saved before the upload response is returned.
-
-    Returns a dict with the best detection (or all-None values if no face
-    was detected / detection failed) so the caller can include it in the
-    response without a second DB round-trip.
-    """
-    empty_result = {"expression": None, "expression_label": None, "confidence": None}
-
+def _detect_face_expression_bg(photo_id: str, image_bytes: bytes):
+    """Run face expression detection (sync, called after upload)."""
     try:
         from ml.face_expression import detect_expression
         from PIL import Image
+        from io import BytesIO
 
         img = Image.open(BytesIO(image_bytes))
         expressions = detect_expression(img)
 
-        if not expressions:
-            return empty_result
+        if expressions:
+            db = get_supabase()
+            best = expressions[0]
 
-        db = get_supabase()
-        best = expressions[0]
-        bbox = best.get("bbox", [0, 0, 0, 0])
+            # Save to face_expressions table
+            db.table("face_expressions").insert({
+                "photo_id": photo_id,
+                "expression": best["expression"],
+                "confidence": best["confidence"],
+                "bbox_x1": best.get("bbox", [0, 0, 0, 0])[0],
+                "bbox_y1": best.get("bbox", [0, 0, 0, 0])[1],
+                "bbox_x2": best.get("bbox", [0, 0, 0, 0])[2],
+                "bbox_y2": best.get("bbox", [0, 0, 0, 0])[3],
+                "created_at": datetime.now(timezone.utc).isoformat(),
+            }).execute()
 
-        # Save to face_expressions table
-        db.table("face_expressions").insert({
-            "photo_id": photo_id,
-            "expression": best["expression"],
-            "confidence": best["confidence"],
-            "bbox_x1": bbox[0],
-            "bbox_y1": bbox[1],
-            "bbox_x2": bbox[2],
-            "bbox_y2": bbox[3],
-        }).execute()
-
-        # Update photo with primary expression
-        db.table("photos").update({
-            "face_expression": best["expression"],
-            "face_confidence": best["confidence"],
-        }).eq("id", photo_id).execute()
-
-        return {
-            "expression": best["expression"],
-            "expression_label": best.get("expression_label", best["expression"]),
-            "confidence": best["confidence"],
-        }
+            # Update photo with primary expression
+            db.table("photos").update({
+                "face_expression": best["expression"],
+                "face_confidence": best["confidence"],
+            }).eq("id", photo_id).execute()
 
     except Exception as e:
-        # Face expression is a best-effort enhancement — never block the
-        # upload flow if detection or the API call fails.
         print(f"Face expression detection failed: {e}")
-        return empty_result
 
 
 @router.post("/process")
@@ -367,7 +345,7 @@ async def get_processing_status(processing_id: str):
 
     result = (
         db.table("photo_processing")
-        .select("id, status, processed_url, processing_time_ms, error_message")
+        .select("id, photo_id, status, processed_url, processing_time_ms, error_message")
         .eq("id", processing_id)
         .execute()
     )
@@ -401,6 +379,35 @@ async def get_processing_status(processing_id: str):
             "download_url": link["download_url"] if link else None,
             "qr_code_url": link["qr_code_url"] if link else None,
         })
+
+        # Fetch face expression for this photo
+        face_expr = None
+        face_label = None
+        photo_id_for_expr = proc.get("photo_id")
+        if photo_id_for_expr:
+            fe_result = (
+                db.table("face_expressions")
+                .select("expression, confidence")
+                .eq("photo_id", photo_id_for_expr)
+                .order("confidence", desc=True)
+                .limit(1)
+                .execute()
+            )
+            if fe_result.data:
+                fe = fe_result.data[0]
+                face_expr = fe["expression"]
+                label_map = {
+                    "happy": "Senang",
+                    "normal": "Netral",
+                    "sad": "Sedih",
+                }
+                face_label = label_map.get(face_expr, face_expr)
+
+        if face_expr:
+            data.update({
+                "face_expression": face_expr,
+                "face_expression_label": face_label,
+            })
 
     # If failed, include error
     if status == "failed":
@@ -487,40 +494,6 @@ async def download_by_code(download_code: str):
 
 
 # ── Auto-Cleanup ──────────────────────────────────────────
-#
-# SCHEMA REALITY CHECK (see actual constraints):
-#   face_expressions.photo_id   -> photos.id   (FK, NO ON DELETE action -> RESTRICT)
-#   photo_processing.photo_id   -> photos.id   (FK, NO ON DELETE action -> RESTRICT)
-#   download_links.processing_id -> photo_processing.id (FK, RESTRICT)
-#
-# Because face_expressions and photo_processing are intentionally KEPT
-# (see rationale below), `photos` rows can NEVER be deleted while those
-# child rows still reference them — Postgres will raise a foreign key
-# violation. The previous version of this function tried to delete
-# `photos` anyway, which silently failed inside the try/except and could
-# leave storage files deleted while the `photos` DB row stayed behind
-# (inconsistent partial cleanup).
-#
-# This version instead:
-#   1. Deletes the actual image FILES from storage (the sensitive part —
-#      visitor faces). This is independent of SQL FKs.
-#   2. Clears `photos.original_url` / `original_path` (anonymizes the row
-#      instead of deleting it) so no working link to a visitor's photo
-#      remains, without violating the FK from face_expressions/photo_processing.
-#   3. Deletes `download_links` (safe — nothing references it).
-#   4. Leaves face_expressions, photo_processing, and photo_sessions
-#      untouched, since they hold no images/PII:
-#        - face_expressions: only an emotion label, needed by
-#          /photobooth/mood/weekly for a rolling 7-day aggregate.
-#        - photo_processing: only timing/status metadata, useful for
-#          performance monitoring and debugging failed runs.
-#        - photo_sessions: already only updated to "expired" elsewhere.
-#
-# If you truly want `photos` rows removed eventually (not just
-# anonymized), do it via a separate long-term retention job that deletes
-# the whole session graph in FK-safe order (face_expressions ->
-# download_links -> photo_processing -> photos -> photo_sessions) after
-# e.g. 90 days — decoupled from this 5-minute privacy cleanup.
 
 def _schedule_cleanup(
     session_id: str,
@@ -529,21 +502,14 @@ def _schedule_cleanup(
     processed_path: str,
     qr_path: str,
 ):
-    """Remove privacy-sensitive image files shortly after processing
-    completes, and anonymize the `photos` row. Statistical/metadata
-    tables (face_expressions, photo_processing, photo_sessions) are
-    preserved — see module-level comment above for why this is required
-    by the current foreign key constraints.
-    """
+    """Schedule deletion of all session data after CLEANUP_DELAY_SECONDS."""
 
     def _do_cleanup():
         time.sleep(CLEANUP_DELAY_SECONDS)
         try:
             db = get_supabase()
 
-            # 1. Delete files from storage (the actual identifiable images).
-            #    Storage objects are not bound by SQL foreign keys, so each
-            #    of these can be removed independently and safely.
+            # 1. Delete files from storage
             try:
                 db.storage.from_("processed").remove([processed_path])
             except Exception:
@@ -553,40 +519,26 @@ def _schedule_cleanup(
             except Exception:
                 pass
 
-            photos_result = db.table("photos").select("id, original_path").eq("session_id", session_id).execute()
+            # Delete original photos + preview
+            photos_result = db.table("photos").select("original_path").eq("session_id", session_id).execute()
             for p in photos_result.data or []:
                 try:
                     db.storage.from_("photos").remove([p["original_path"]])
                 except Exception:
                     pass
+            # Delete preview
             try:
                 db.storage.from_("photos").remove([f"{session_id}/preview_nobg.png"])
             except Exception:
                 pass
 
-            # 2. Anonymize (not delete) the `photos` row(s) for this session.
-            #    We CANNOT delete them: face_expressions.photo_id and
-            #    photo_processing.photo_id reference photos.id with no
-            #    ON DELETE action, so Postgres would reject the delete.
-            #    Clearing the URL/path achieves the same privacy goal
-            #    (no working link to the visitor's image survives) while
-            #    keeping the row's id valid for existing foreign keys.
-            db.table("photos").update({
-                "original_path": None,
-                "original_url": None,
-            }).eq("session_id", session_id).execute()
-
-            # 3. Delete download_links — safe, nothing references this table.
+            # 2. Delete database records (cascading from session)
             db.table("download_links").delete().eq("processing_id", processing_id).execute()
-
-            # NOTE: face_expressions, photo_processing, and photo_sessions
-            # are intentionally NOT touched here — see module comment above.
-
-            # photo_sessions is never deleted, only marked expired.
+            db.table("photo_processing").delete().eq("photo_id", photo_id).execute()
+            db.table("photos").delete().eq("session_id", session_id).execute()
             db.table("photo_sessions").update({"status": "expired"}).eq("id", session_id).execute()
 
-            print(f"[Cleanup] Session {session_id} image files removed and photos anonymized "
-                  f"after {CLEANUP_DELAY_SECONDS}s (face_expressions and photo_processing preserved)")
+            print(f"[Cleanup] Session {session_id} cleaned up after {CLEANUP_DELAY_SECONDS}s")
         except Exception as e:
             print(f"[Cleanup] Failed for session {session_id}: {e}")
 
