@@ -1,5 +1,5 @@
 """
-Assets router - backgrounds, mascots, filters
+Assets router - backgrounds, mascots, filters, mood
 """
 import traceback
 from datetime import datetime, timezone, timedelta
@@ -111,7 +111,19 @@ async def get_filters():
 
 @router.get("/mood/weekly")
 async def get_weekly_mood():
-    """Agregat ekspresi wajah 7 hari terakhir dari tabel face_expressions."""
+    """
+    Aggregate face_expressions from the last rolling 7 days.
+
+    This is the SINGLE SOURCE OF TRUTH for the weekly mood endpoint.
+    Final registered path: GET /api/mood/weekly (see main.py, which
+    mounts this router with prefix="/api" and no further prefix).
+
+    Response shape (must stay in sync with frontend/src/pages/Home.jsx
+    and Result.jsx, which read: data.total, data.dominant,
+    data.dominant_label, data.breakdown[].expression,
+    data.breakdown[].label, data.breakdown[].count,
+    data.breakdown[].percent):
+    """
     try:
         db = get_supabase()
         since = (datetime.now(timezone.utc) - timedelta(days=7)).isoformat()
@@ -125,7 +137,7 @@ async def get_weekly_mood():
 
         counts = {"happy": 0, "normal": 0, "sad": 0}
         for row in result.data or []:
-            expr = row.get("expression", "").lower()
+            expr = (row.get("expression") or "").lower()
             if expr in counts:
                 counts[expr] += 1
 

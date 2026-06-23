@@ -15,7 +15,7 @@ import uvicorn
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from config import settings
-from routers import health, sessions, photos, assets, mood
+from routers import health, sessions, photos, assets
 
 app = FastAPI(
     title="AI Photobooth Kota Madiun",
@@ -33,11 +33,21 @@ app.add_middleware(
 )
 
 # Register routers
+# NOTE: routers.mood is intentionally NOT registered here. assets.py already
+# defines GET /api/mood/weekly (matching the response shape the frontend
+# expects: total / dominant / dominant_label / breakdown[].percent/.label).
+# A second router (routers/mood.py) used to also register a path that
+# resolved to /api/photobooth/mood/weekly with a DIFFERENT response shape
+# (total_samples / dominant_expression / breakdown[].percentage/.expression_label).
+# Keeping both registered risked the frontend silently breaking depending on
+# which router FastAPI matched, and the path the frontend actually calls
+# (/api/mood/weekly) only ever existed on assets.py. If you need the
+# photobooth-prefixed version of this endpoint, keep it as a separate
+# explicit path rather than re-registering routers/mood.py.
 app.include_router(health.router, prefix="/api")
 app.include_router(sessions.router, prefix="/api")
 app.include_router(photos.router, prefix="/api")
 app.include_router(assets.router, prefix="/api")
-app.include_router(mood.router, prefix="/api")
 
 
 @app.get("/")
